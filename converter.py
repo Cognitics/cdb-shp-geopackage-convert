@@ -348,8 +348,8 @@ def readDBF(dbfFilename):
         elif('ID' in record):
             cNameRecords[record['ID']] = recordFields
         else:
-            cNameRecords[str(rowNum)] = recordFields
-        rowNum = rowNum + 1    
+            cNameRecords[OrderedDict(('ID', str(rowNum))] = recordFields
+        rowNum = rowNum + 1
     return cNameRecords
 
 
