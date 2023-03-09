@@ -41,6 +41,7 @@ def cleanPath(path):
 
 def getOutputLayerName(shpFilename):
     filenameOnly = os.path.basename(shpFilename)
+'''
     filenameParts = filenameOnly.split("_")
     datasetCode = filenameParts[1]
     datasetName = filenameParts[-4]
@@ -50,6 +51,7 @@ def getOutputLayerName(shpFilename):
     uref = filenameParts[5]
     #Create the layer if it doesn't already exist.
     outLayerName = datasetName + "_" + lod + "_" + componentSelector1 + "_" + componentSelector2
+'''
     return outLayerName
 
 def getFilenameComponents(shpFilename):
@@ -74,16 +76,16 @@ def getFilenameComponents(shpFilename):
 
 
 def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
-    dbfFilename = converter.getFeatureClassAttrFileName(shpFilename)
+    dbfFCFilename = converter.getFeatureClassAttrFileName(shpFilename)
+    dbfEAFilename = converter.getExtendedAttrFileName(shpFilename)
 
-    #If this isn't a feature shapefile (e.g. a FC or extended attr), just ignore and continue
-    if(dbfFilename==None):
+    if(shpFilename == dbfFCFilename or shpFilename == dbfEAFilename):
         return None
     convertedFields = []
     fClassRecords = {}
     layerComponents = getFilenameComponents(shpFilename)
-    if(os.path.isfile(dbfFilename)):
-        fClassRecords = dbfconvert.readDBF(dbfFilename)
+    if(dbfFCFilename != None and os.path.isfile(dbfFCFilename)):
+        fClassRecords = dbfconvert.readDBF(dbfFCFilename)
 
     dataSource = ogr.Open(shpFilename)
     if(dataSource==None):
@@ -110,6 +112,7 @@ def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
     fieldIndexes = {}
     if(outLayer!=None):
         outputLayerDefinition = outLayer.GetLayerDefn()
+        #track field indexes for existing layers? 
         for i in range(outputLayerDefinition.GetFieldCount()):
             fieldName =  outputLayerDefinition.GetFieldDefn(i).GetName()
             convertedFields.append(fieldName)
@@ -130,55 +133,6 @@ def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
             convertedFields.append(fieldName)
             fieldIndexes[fieldName] = fieldIdx
             fieldIdx += 1
-
-        # Add the LOD and UXX fields
-        fieldName =  "_DATASET_CODE"
-        fieldTypeCode = ogr.OFTString
-        fieldDef = ogr.FieldDefn(fieldName,fieldTypeCode)
-        outLayer.CreateField(fieldDef)
-        convertedFields.append(fieldName)
-        fieldIndexes[fieldName] = fieldIdx
-        fieldIdx += 1
-
-        fieldName =  "_COMPONENT_SELECTOR_1"
-        fieldTypeCode = ogr.OFTString
-        fieldDef = ogr.FieldDefn(fieldName,fieldTypeCode)
-        outLayer.CreateField(fieldDef)
-        convertedFields.append(fieldName)
-        fieldIndexes[fieldName] = fieldIdx
-        fieldIdx += 1
-
-        fieldName =  "_COMPONENT_SELECTOR_2"
-        fieldTypeCode = ogr.OFTString
-        fieldDef = ogr.FieldDefn(fieldName,fieldTypeCode)
-        outLayer.CreateField(fieldDef)
-        convertedFields.append(fieldName)
-        fieldIndexes[fieldName] = fieldIdx
-        fieldIdx += 1
-
-        fieldName =  "_LOD"
-        fieldTypeCode = ogr.OFTString
-        fieldDef = ogr.FieldDefn(fieldName,fieldTypeCode)
-        outLayer.CreateField(fieldDef)
-        convertedFields.append(fieldName)
-        fieldIndexes[fieldName] = fieldIdx
-        fieldIdx += 1
-
-        fieldName =  "_UREF"
-        fieldTypeCode = ogr.OFTString
-        fieldDef = ogr.FieldDefn(fieldName,fieldTypeCode)
-        outLayer.CreateField(fieldDef)
-        convertedFields.append(fieldName)
-        fieldIndexes[fieldName] = fieldIdx
-        fieldIdx += 1
-
-        fieldName =  "_RREF"
-        fieldTypeCode = ogr.OFTString
-        fieldDef = ogr.FieldDefn(fieldName,fieldTypeCode)
-        outLayer.CreateField(fieldDef)
-        convertedFields.append(fieldName)
-        fieldIndexes[fieldName] = fieldIdx
-        fieldIdx += 1
 
         #Create fields for featureClass Attributes
         for recordCNAM, row in fClassRecords.items():
@@ -205,6 +159,7 @@ def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
     layer.ResetReading()
     featureCount = 0
     inFeature = layer.GetNextFeature()
+    #copy the features
     while inFeature is not None:
         featureCount += 1
         outFeature = ogr.Feature(layerDefinition)
@@ -213,13 +168,7 @@ def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
 
         cnamValue = inFeature.GetField('CNAM')
         fclassRecord = fClassRecords[cnamValue]
-        outFeature.SetField(fieldIndexes["_DATASET_CODE"], layerComponents['datasetcode'])
-        outFeature.SetField(fieldIndexes["_COMPONENT_SELECTOR_1"], layerComponents['selector1'])
-        outFeature.SetField(fieldIndexes["_COMPONENT_SELECTOR_2"], layerComponents['selector2'])
-        outFeature.SetField(fieldIndexes["_LOD"], layerComponents['lod'])
-        outFeature.SetField(fieldIndexes["_UREF"], layerComponents['uref'])
-        outFeature.SetField(fieldIndexes["_RREF"], layerComponents['rref'])
-        
+
         #flatten attributes from the feature class attributes table
         if(cnamValue in fClassRecords.keys()):
             fclassFields = fClassRecords[cnamValue]
@@ -283,20 +232,7 @@ def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir):
     sqliteCon = sqlite3.connect(outputGeoPackageFile)
     if(createExtendedAttributesTable(sqliteCon,shpFilename)):
         dbfTableName = getExtendedAttrTableName(shpFilename)
-        '''
-        RelatedTables.createRTESchema(sqliteCon)
-        relationship = RelatedTables.Relationship()
-        relationship.baseTableName = "fid"
-        relationship.baseTableName = featureTableName
-        relationship.baseTableColumn = "fid"
-        relationship.relatedTableName = dbfTableName
-        relationship.relationshipName = "CDB EA"
-        relationship.mappingTableName = featureTableName + "_" + dbfTableName
-        RelatedTables.addRelationshipTable(sqliteCon,relationship)
-        '''
-        #TODO: Link all extended attributes via related tables
-        # For each feature row, match the CEAI,GEAI,VEAI records in the extended attributes
-        # table, and link them with RelatedTables.addFeatureRelationship
+#todo
 
     sqliteCon.close()
     return
