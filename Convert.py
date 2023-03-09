@@ -41,7 +41,7 @@ def cleanPath(path):
 
 def getOutputLayerName(shpFilename):
     filenameOnly = os.path.basename(shpFilename)
-    return outLayerName
+    return filenameOnly
 
 def getFilenameComponents(shpFilename):
     components = {}
