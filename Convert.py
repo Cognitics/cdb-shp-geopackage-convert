@@ -41,17 +41,6 @@ def cleanPath(path):
 
 def getOutputLayerName(shpFilename):
     filenameOnly = os.path.basename(shpFilename)
-'''
-    filenameParts = filenameOnly.split("_")
-    datasetCode = filenameParts[1]
-    datasetName = filenameParts[-4]
-    componentSelector1 = filenameParts[2]
-    componentSelector2 = filenameParts[3]
-    lod = filenameParts[4]
-    uref = filenameParts[5]
-    #Create the layer if it doesn't already exist.
-    outLayerName = datasetName + "_" + lod + "_" + componentSelector1 + "_" + componentSelector2
-'''
     return outLayerName
 
 def getFilenameComponents(shpFilename):
