@@ -343,8 +343,13 @@ def readDBF(dbfFilename):
         for field in record.keys():
             recordFields[field] = record[field]
             #print(record)
-
-        cNameRecords[record['CNAM']] = recordFields
+#TODO: This function really only works with FC tables. Need to use the ID column when working with EA tables.
+        if('CNAM' in record):
+            cNameRecords[record['CNAM']] = recordFields
+        elif('ID' in record):
+            cNameRecords[record['ID']] = recordFields
+        else:
+            print("Missing primary key of ID or CNAM")
             
     return cNameRecords
 
