@@ -335,7 +335,6 @@ def convertSHP(sqliteCon,shpFilename,gpkgFilename,fClassRecords = None, includeC
 def readDBF(dbfFilename):
     cNameRecords = {}
 
-    dbfFields = dbfread.DBF(dbfFilename).fields
 
     for record in dbfread.DBF(dbfFilename,load=True):
         recordFields = {}        
@@ -349,7 +348,8 @@ def readDBF(dbfFilename):
         elif('ID' in record):
             cNameRecords[record['ID']] = recordFields
         else:
-            print("Missing primary key of ID or CNAM")
+            print("Missing primary key of ID or CNAM for " + dbfFilename)
+            print(str(record))
             
     return cNameRecords
 
