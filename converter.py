@@ -344,11 +344,14 @@ def readDBF(dbfFilename):
             #print(record)
 #TODO: This function really only works with FC tables. Need to use the ID column when working with EA tables.
         if('CNAM' in record):
+            print(str(record['CNAM']))
             cNameRecords[record['CNAM']] = recordFields
         elif('ID' in record):
             cNameRecords[record['ID']] = recordFields
         else:
-            cNameRecords[OrderedDict(('ID', str(rowNum))] = recordFields
+            #idRecord = {}
+#            idRecord['ID'] = 
+            cNameRecords[str(rowNum)] = recordFields
         rowNum = rowNum + 1
     return cNameRecords
 
@@ -382,13 +385,13 @@ def convertDBF(sqliteCon,dbfFilename,dbfTableName,tableDescription):
     contentsAttrs = (dbfTableName,dbfTableName,dbfTableName + " " + tableDescription)
     cursor.execute(contentsString,contentsAttrs)
 
-    for record in dbfTable:
+    for rowPK in dbfTable.keys():
         #print(record)
         insertValues = []
         insertValuesString = ""
         insertString = ""
-                                            
-        for key,value in record.items():
+        row = dbfTable[rowPK]
+        for key,value in row.items():
             if(len(insertString)>0):
                 insertString += ","
                 insertValuesString += ","

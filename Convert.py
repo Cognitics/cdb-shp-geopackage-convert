@@ -19,7 +19,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import os
 import sys
 import subprocess
-
+import debugpy
 import converter
 import dbfconvert
 try:
@@ -31,6 +31,12 @@ import sqlite3
 
 version_num = int(gdal.VersionInfo('VERSION_NUM'))
 print("GDAL Version " + str(version_num))
+
+
+debugpy.listen(("0.0.0.0", 5678))
+
+print("Waiting for client to attach...")
+debugpy.wait_for_client()
 
 if version_num < 2020300:
     sys.exit('ERROR: Python bindings of GDAL 2.2.3 or later required due to GeoPackage performance issues.')
@@ -65,6 +71,7 @@ def getFilenameComponents(shpFilename):
 
 
 def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
+    hasCNAM = False
     dbfFCFilename = converter.getFeatureClassAttrFileName(shpFilename)
     dbfEAFilename = converter.getExtendedAttrFileName(shpFilename)
 
@@ -113,6 +120,8 @@ def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
         # Add fields
         for i in range(layerDefinition.GetFieldCount()):
             fieldName =  layerDefinition.GetFieldDefn(i).GetName()
+            if(fieldName=='CNAM'):
+                hasCNAM = True
             fieldTypeCode = layerDefinition.GetFieldDefn(i).GetType()
             fieldType = layerDefinition.GetFieldDefn(i).GetFieldTypeName(fieldTypeCode)
             fieldWidth = layerDefinition.GetFieldDefn(i).GetWidth()
@@ -155,14 +164,15 @@ def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
         #Copy the geometry and attributes 
         outFeature.SetFrom(inFeature)
 
-        cnamValue = inFeature.GetField('CNAM')
-        fclassRecord = fClassRecords[cnamValue]
+        if(hasCNAM):
+            cnamValue = inFeature.GetField('CNAM')
+            fclassRecord = fClassRecords[cnamValue]
 
-        #flatten attributes from the feature class attributes table
-        if(cnamValue in fClassRecords.keys()):
-            fclassFields = fClassRecords[cnamValue]
-            for field in fclassFields.keys():
-                outFeature.SetField(fieldIndexes[field],fclassFields[field])
+            #flatten attributes from the feature class attributes table
+            if(cnamValue in fClassRecords.keys()):
+                fclassFields = fClassRecords[cnamValue]
+                for field in fclassFields.keys():
+                    outFeature.SetField(fieldIndexes[field],fclassFields[field])
 
         #write the feature
         outLayer.CreateFeature(outFeature)
@@ -213,7 +223,9 @@ def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir):
 
     #Read all the feature records from the DBF at once (using GDAL)
     #copyFeaturesFromShapeToGeoPackage(shpFilename,outputGeoPackageFile)
-    fClassRecords = converter.readDBF(fcAttrName)
+    # Don't need to read feature class records -- they're flattened
+    #if(os.path.exists(fcAttrName)):
+    #    fClassRecords = converter.readDBF(fcAttrName)
     #Read Featureclass records
     featureTableName = converter.getFeatureAttrTableName(shpFilename)
     copyFeaturesFromShapeToGeoPackage(shpFilename,outputGeoPackageFile)
