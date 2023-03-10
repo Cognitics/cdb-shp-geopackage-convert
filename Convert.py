@@ -19,9 +19,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import os
 import sys
 import subprocess
-import debugpy
-import converter
+
 import dbfconvert
+import converter
+
 try:
     from osgeo import ogr, osr, gdal
 except:
@@ -32,11 +33,10 @@ import sqlite3
 version_num = int(gdal.VersionInfo('VERSION_NUM'))
 print("GDAL Version " + str(version_num))
 
-
-debugpy.listen(("0.0.0.0", 5678))
-
-print("Waiting for client to attach...")
-debugpy.wait_for_client()
+#import debugpy
+#debugpy.listen(("0.0.0.0", 5678))
+#print("Waiting for client to attach...")
+#debugpy.wait_for_client()
 
 if version_num < 2020300:
     sys.exit('ERROR: Python bindings of GDAL 2.2.3 or later required due to GeoPackage performance issues.')
@@ -205,7 +205,7 @@ def createExtendedAttributesTable(sqliteCon,shpFilename):
 
 def getExtendedAttrTableName(shpFilename):
     extendedAttributesDBFFilename = converter.getExtendedAttrFileName(shpFilename)
-    shpBaseFilename = os.path.basename(shpFilename)
+    shpBaseFilename = os.path.basename(extendedAttributesDBFFilename)
     dbfTableName = shpBaseFilename[0:-4]
     return dbfTableName
 
@@ -221,20 +221,10 @@ def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir):
     if not os.path.exists(parentDirectory):
         os.makedirs(parentDirectory)
 
-    #Read all the feature records from the DBF at once (using GDAL)
-    #copyFeaturesFromShapeToGeoPackage(shpFilename,outputGeoPackageFile)
-    # Don't need to read feature class records -- they're flattened
-    #if(os.path.exists(fcAttrName)):
-    #    fClassRecords = converter.readDBF(fcAttrName)
-    #Read Featureclass records
     featureTableName = converter.getFeatureAttrTableName(shpFilename)
     copyFeaturesFromShapeToGeoPackage(shpFilename,outputGeoPackageFile)
-    #convertSHP(sqliteCon,shpFilename,outputGeoPackageFile, fClassRecords, True)
     sqliteCon = sqlite3.connect(outputGeoPackageFile)
-    if(createExtendedAttributesTable(sqliteCon,shpFilename)):
-        dbfTableName = getExtendedAttrTableName(shpFilename)
-#todo
-
+    createExtendedAttributesTable(sqliteCon,shpFilename)
     sqliteCon.close()
     return
 
