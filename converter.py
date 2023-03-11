@@ -26,11 +26,20 @@ try:
 except:
     sys.exit('ERROR: cannot find GDAL/OGR modules')
 
+def removeFileIfExists(theFile):
+
+    if(os.path.exists(theFile)):
+        print("Removing " + theFile)
+        os.remove(theFile)
+        if(os.path.exists(theFile)):
+            print("Failed to remove " + theFile)
+
+
 def removeShapeFile(shpFile):
-    os.remove(shpFile)
-    os.remove(shpFile[0:-3] + "dbf")
-    os.remove(shpFile[0:-3] + "dbt")
-    os.remove(shpFile[0:-3] + "shx")
+    removeFileIfExists(shpFile)
+    removeFileIfExists(shpFile[0:-3] + "dbf")
+    removeFileIfExists(shpFile[0:-3] + "dbt")
+    removeFileIfExists(shpFile[0:-3] + "shx")
 
 def getFeatureClassSelector(fclassSelector):
     # If it's a polygon (T005)
@@ -105,6 +114,17 @@ def getExtendedAttrFileName(shpFilename):
     dbfFilename = shpFilename.replace(featuresSelector2,fcAttrSelector)
     dbfFilename = dbfFilename.replace('.shp','.dbf')
     return dbfFilename
+
+def getRelationshipAttrFileName(shpFilename):
+    #get the selector of the feature table
+    featuresSelector2 = getSelector2(shpFilename)
+    if(featuresSelector2=="T003"):
+        relAttrSelector = "T011"
+    else:
+        return None
+    dbfFilename = shpFilename.replace(featuresSelector2,relAttrSelector)
+    return dbfFilename
+
 
 def getFeatureAttrTableName(shpFilename):
     tableName = os.path.basename(shpFilename)[0:-4]

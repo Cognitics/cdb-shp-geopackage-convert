@@ -33,10 +33,10 @@ import sqlite3
 version_num = int(gdal.VersionInfo('VERSION_NUM'))
 print("GDAL Version " + str(version_num))
 
-#import debugpy
-#debugpy.listen(("0.0.0.0", 5678))
-#print("Waiting for client to attach...")
-#debugpy.wait_for_client()
+import debugpy
+debugpy.listen(("0.0.0.0", 5678))
+print("Waiting for client to attach...")
+debugpy.wait_for_client()
 
 if version_num < 2020300:
     sys.exit('ERROR: Python bindings of GDAL 2.2.3 or later required due to GeoPackage performance issues.')
@@ -46,7 +46,7 @@ def cleanPath(path):
     return cleanPath
 
 def getOutputLayerName(shpFilename):
-    filenameOnly = os.path.basename(shpFilename)
+    filenameOnly = os.path.basename(shpFilename[0:-4])
     return filenameOnly
 
 def getFilenameComponents(shpFilename):
@@ -70,13 +70,17 @@ def getFilenameComponents(shpFilename):
     return components
 
 
-def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
+def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename, flattenFCAttrs, removeConverted):
     hasCNAM = False
-    dbfFCFilename = converter.getFeatureClassAttrFileName(shpFilename)
-    dbfEAFilename = converter.getExtendedAttrFileName(shpFilename)
+    dbfFCFilename = None
+    dbfEAFilename = None
 
-    if(shpFilename == dbfFCFilename or shpFilename == dbfEAFilename):
-        return None
+    if(flattenFCAttrs):
+        dbfFCFilename = converter.getFeatureClassAttrFileName(shpFilename)
+        dbfEAFilename = converter.getExtendedAttrFileName(shpFilename)
+        if(shpFilename == dbfFCFilename or shpFilename == dbfEAFilename):
+            return None
+
     convertedFields = []
     fClassRecords = {}
     layerComponents = getFilenameComponents(shpFilename)
@@ -179,6 +183,13 @@ def copyFeaturesFromShapeToGeoPackage(shpFilename, gpkgFilename):
         outFeature = None
         inFeature = layer.GetNextFeature()
     gpkgFile.CommitTransaction()
+    if(removeConverted):
+        dataSource = None
+        converter.removeShapeFile(shpFilename)
+        #even though the FC file is a dbf, some tools make an empty shapefile
+        #so we'll try to delete that one too.
+        if(flattenFCAttrs):
+            converter.removeShapeFile(dbfFCFilename[0:-3] + "shp")
     return featureCount
 
 
@@ -191,16 +202,19 @@ def getOutputGeoPackageFilePath(shpFilename,cdbInputPath,cdbOutputPath):
     return fullGPKGOutputFilePath
 
 #create the extended attributes table
-def createExtendedAttributesTable(sqliteCon,shpFilename):
+def createExtendedAttributesTable(sqliteCon,shpFilename, removeConverted):
     #create the table
     if(sqliteCon == None):
         print("Unable to access database when creating extended attributes table")
         return None
-    extendedAttributesDBFFilename = converter.getExtendedAttrFileName(shpFilename)    
+    extendedAttributesDBFFilename = converter.getExtendedAttrFileName(shpFilename)
+
     dbfTableName = getExtendedAttrTableName(shpFilename)
     if(os.path.exists(extendedAttributesDBFFilename)):
-        return converter.convertDBF(sqliteCon,extendedAttributesDBFFilename,
-            dbfTableName,'Extended Attributes')
+        if(os.path.getsize(extendedAttributesDBFFilename)!=0):
+            converter.convertDBF(sqliteCon,extendedAttributesDBFFilename, dbfTableName,'Extended Attributes')
+        if(removeConverted):
+            converter.removeShapeFile(extendedAttributesDBFFilename[0:-3] + "shp")
     return None
 
 def getExtendedAttrTableName(shpFilename):
@@ -210,10 +224,44 @@ def getExtendedAttrTableName(shpFilename):
     return dbfTableName
 
 #convert a shapefile into a GeoPackage file using GDAL.
-def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir):    
+def convertRelationshipAttrShapeFile(relAttrFileName, cdbInputDir, cdbOutputDir, removeConverted):    
+
+    if(os.path.exists(relAttrFileName) == False):
+        return None
+    if(os.path.getsize(relAttrFileName)==0):
+        if(removeConverted):
+            converter.removeShapeFile(relAttrFileName[0:-3] + "shp")
+        return None
+    
+    relAttrTableName = relAttrFileName[0:-4]
+    outputGeoPackageFile = getOutputGeoPackageFilePath(relAttrFileName,cdbInputDir, cdbOutputDir)
+    parentDirectory = os.path.dirname(cleanPath(outputGeoPackageFile))
+    if not os.path.exists(parentDirectory):
+        os.makedirs(parentDirectory)
+
+    if(os.path.exists(relAttrFileName)):
+        sqliteCon = sqlite3.connect(outputGeoPackageFile)
+        converter.convertDBF(sqliteCon,relAttrFileName,
+            relAttrTableName,'Relationship Attributes')
+        
+        if(removeConverted):
+            converter.removeShapeFile(relAttrFileName[0:-3] + "shp")
+    return None
+
+#convert a shapefile into a GeoPackage file using GDAL.
+def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir, removeConverted):    
+    
+    #see if it's a relationship file
+    selector2 = converter.getSelector2(shpFilename)
+    if(selector2=="T011"):
+        convertRelationshipAttrShapeFile(shpFilename, cdbInputDir, cdbOutputDir, removeConverted)
+        return
+    
+    #make sure it's a real feature file if it's not a relationship file.
     fcAttrName = converter.getFeatureClassAttrFileName(shpFilename)    
     if(fcAttrName==None):
         return None
+
     #Create the features table, adding the feature class columns
     outputGeoPackageFile = getOutputGeoPackageFilePath(shpFilename,cdbInputDir, cdbOutputDir)
     # Make whatever directories we need for the output file.
@@ -222,26 +270,50 @@ def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir):
         os.makedirs(parentDirectory)
 
     featureTableName = converter.getFeatureAttrTableName(shpFilename)
-    copyFeaturesFromShapeToGeoPackage(shpFilename,outputGeoPackageFile)
+    copyFeaturesFromShapeToGeoPackage(shpFilename,outputGeoPackageFile, True, removeConverted)
     sqliteCon = sqlite3.connect(outputGeoPackageFile)
-    createExtendedAttributesTable(sqliteCon,shpFilename)
+    createExtendedAttributesTable(sqliteCon,shpFilename, removeConverted)    
     sqliteCon.close()
     return
 
-def translateCDB(cdbInputDir, cdbOutputDir):
+def translateCDB(cdbInputDir, cdbOutputDir, removeConverted):
     sys.path.append(cdbInputDir)
     import generateMetaFiles
     shapeFiles = generateMetaFiles.generateMetaFiles(cDBRoot)
 
     for shapefile in shapeFiles:
-        convertShapeFile(shapefile,cdbInputDir,cdbOutputDir)
+        convertShapeFile(shapefile,cdbInputDir,cdbOutputDir, removeConverted)
+
+def printUsage():
+    print("Usage: Convert.py [--REMOVE_SHP] <Input Root CDB Directory> <Output Directory for GeoPackage Files>")
+    print("Note: Only the GeoPackage files will be placed in the output directory.")
+    print("      The input and output directories can be the same. If so, it is highly")
+    print("      recommended that you make a copy of the CDB first, especially")
+    print("      if you use the --REMOVE_SHP, which will remove all shapefiles and")
+    print("      the associated files such as shx, dbf, etc.")
+    print("")
+    print("      Only the GeoPackage files will be placed in the output directory, no other files will be copied.")
 
 
-if(len(sys.argv) != 3):
-    print("Usage: Convert.py <Input Root CDB Directory> <Output Directory for GeoPackage Files>")
+if(len(sys.argv) < 3):
+    printUsage()
+    exit()
+removeConverted = False
+nextArg = 1
+if(sys.argv[1]=="--REMOVE_SHP"):
+    if(len(sys.argv) != 4):
+        printUsage()
+        exit()
+
+    removeConverted = True
+    nextArg = nextArg + 1
+cDBRoot = sys.argv[nextArg]
+nextArg = nextArg + 1
+outputDirectory = sys.argv[nextArg]
+
+if(removeConverted and (cDBRoot != outputDirectory)):
+    print("Error: To use --REMOVE_SHP, the input and output directories must be the same")
     exit()
 
-cDBRoot = sys.argv[1]
-outputDirectory = sys.argv[2]
-translateCDB(cDBRoot,outputDirectory)
+translateCDB(cDBRoot,outputDirectory,removeConverted)
 
