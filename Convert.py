@@ -33,10 +33,10 @@ import sqlite3
 version_num = int(gdal.VersionInfo('VERSION_NUM'))
 print("GDAL Version " + str(version_num))
 
-import debugpy
-debugpy.listen(("0.0.0.0", 5678))
-print("Waiting for client to attach...")
-debugpy.wait_for_client()
+#import debugpy
+#debugpy.listen(("0.0.0.0", 5678))
+#print("Waiting for client to attach...")
+#debugpy.wait_for_client()
 
 if version_num < 2020300:
     sys.exit('ERROR: Python bindings of GDAL 2.2.3 or later required due to GeoPackage performance issues.')
@@ -223,8 +223,8 @@ def getExtendedAttrTableName(shpFilename):
     dbfTableName = shpBaseFilename[0:-4]
     return dbfTableName
 
-#convert a shapefile into a GeoPackage file using GDAL.
-def convertRelationshipAttrShapeFile(relAttrFileName, cdbInputDir, cdbOutputDir, removeConverted):    
+#convert a relationship dbf into a GeoPackage, as a table in an existing file.
+def convertRelationshipAttrShapeFile(sqliteCon,relAttrFileName, cdbInputDir, cdbOutputDir, removeConverted):    
 
     if(os.path.exists(relAttrFileName) == False):
         return None
@@ -233,19 +233,13 @@ def convertRelationshipAttrShapeFile(relAttrFileName, cdbInputDir, cdbOutputDir,
             converter.removeShapeFile(relAttrFileName[0:-3] + "shp")
         return None
     
-    relAttrTableName = relAttrFileName[0:-4]
-    outputGeoPackageFile = getOutputGeoPackageFilePath(relAttrFileName,cdbInputDir, cdbOutputDir)
-    parentDirectory = os.path.dirname(cleanPath(outputGeoPackageFile))
-    if not os.path.exists(parentDirectory):
-        os.makedirs(parentDirectory)
+    relAttrTableName = converter.getFeatureAttrTableName(relAttrFileName)
 
-    if(os.path.exists(relAttrFileName)):
-        sqliteCon = sqlite3.connect(outputGeoPackageFile)
-        converter.convertDBF(sqliteCon,relAttrFileName,
-            relAttrTableName,'Relationship Attributes')
-        
-        if(removeConverted):
-            converter.removeShapeFile(relAttrFileName[0:-3] + "shp")
+    converter.convertDBF(sqliteCon,relAttrFileName,
+        relAttrTableName, 'Relationship Attributes', False)
+
+    if(removeConverted):
+        converter.removeShapeFile(relAttrFileName[0:-3] + "shp")
     return None
 
 #convert a shapefile into a GeoPackage file using GDAL.
@@ -254,8 +248,13 @@ def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir, removeConverted):
     #see if it's a relationship file
     selector2 = converter.getSelector2(shpFilename)
     if(selector2=="T011"):
-        convertRelationshipAttrShapeFile(shpFilename, cdbInputDir, cdbOutputDir, removeConverted)
-        return
+        outputGeoPackageFile = getOutputGeoPackageFilePath(shpFilename,cdbInputDir, cdbOutputDir)
+        sqliteCon = sqlite3.connect(outputGeoPackageFile)
+        relFileName = shpFilename
+        if(relFileName):
+            convertRelationshipAttrShapeFile(sqliteCon,relFileName[0:-3] + "dbf", cdbInputDir, cdbOutputDir, removeConverted)
+        sqliteCon.close()
+        return None
     
     #make sure it's a real feature file if it's not a relationship file.
     fcAttrName = converter.getFeatureClassAttrFileName(shpFilename)    
@@ -274,6 +273,8 @@ def convertShapeFile(shpFilename, cdbInputDir, cdbOutputDir, removeConverted):
     sqliteCon = sqlite3.connect(outputGeoPackageFile)
     createExtendedAttributesTable(sqliteCon,shpFilename, removeConverted)    
     sqliteCon.close()
+
+        
     return
 
 def translateCDB(cdbInputDir, cdbOutputDir, removeConverted):

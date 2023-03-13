@@ -27,9 +27,7 @@ except:
     sys.exit('ERROR: cannot find GDAL/OGR modules')
 
 def removeFileIfExists(theFile):
-
     if(os.path.exists(theFile)):
-        print("Removing " + theFile)
         os.remove(theFile)
         if(os.path.exists(theFile)):
             print("Failed to remove " + theFile)
@@ -167,7 +165,7 @@ def readDBF(dbfFilename):
     return cNameRecords
 
 
-def convertDBF(sqliteCon,dbfFilename,dbfTableName,tableDescription):
+def convertDBF(sqliteCon,dbfFilename,dbfTableName,tableDescription, addToGeoPackageContents=True):
     dbfTable = readDBF(dbfFilename)
     if(len(dbfTable)==0):
         return None
@@ -193,10 +191,10 @@ def convertDBF(sqliteCon,dbfFilename,dbfTableName,tableDescription):
     createString += ")"
     
     cursor.execute(createString)
-
-    contentsString = "insert into gpkg_contents (table_name,data_type,identifier,description,last_change) VALUES(?,'attributes',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))"
-    contentsAttrs = (dbfTableName,dbfTableName,dbfTableName + " " + tableDescription)
-    cursor.execute(contentsString,contentsAttrs)
+    if(addToGeoPackageContents == True):
+        contentsString = "insert into gpkg_contents (table_name,data_type,identifier,description,last_change) VALUES(?,'attributes',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))"
+        contentsAttrs = (dbfTableName,dbfTableName,dbfTableName + " " + tableDescription)
+        cursor.execute(contentsString,contentsAttrs)
 
     for rowPK in dbfTable.keys():
         #print(record)
